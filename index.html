@@ -1,0 +1,2995 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Testudo — storage engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #e8ebef;
+        --panel: #f4f6f8;
+        --ink: #10202e;
+        --ink-2: #4a5d6e;
+        --ink-3: #6b7c8c;
+        --rule: #c0cad3;
+        --rule-2: #d5dde4;
+        --blue: #1f5c8b;
+        --blue-d: #16456a;
+        --oxide: #a84424;
+        --moss: #3e6b4f;
+        --plum: #6b4e8c;
+        --ochre: #a86a24;
+
+        --sans: "Space Grotesk", system-ui, sans-serif;
+        --mono: "Space Mono", ui-monospace, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        display: flex;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .font-mono {
+        font-family: var(--mono);
+      }
+
+      /* ─────────── LAYOUT ─────────── */
+      .layout {
+        display: flex;
+        width: 100%;
+        height: 100vh;
+      }
+
+      .sidebar {
+        width: 244px;
+        flex-shrink: 0;
+        background: var(--panel);
+        border-right: 1px solid var(--rule);
+        display: flex;
+        flex-direction: column;
+        padding: 28px 0 20px;
+      }
+
+      .main-content {
+        flex: 1;
+        overflow-y: auto;
+        background: var(--paper);
+      }
+
+      /* ─────────── SIDEBAR ─────────── */
+      .logo {
+        padding: 0 24px 26px;
+      }
+      .logo h1 {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+      .logo p {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        margin-top: 5px;
+      }
+
+      .nav {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+      .nav-item {
+        padding: 9px 24px;
+        font-size: 14.5px;
+        color: var(--ink-2);
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        transition:
+          color 0.12s,
+          background 0.12s;
+      }
+      .nav-item:hover {
+        color: var(--ink);
+        background: rgba(31, 92, 139, 0.05);
+      }
+      .nav-item.on {
+        color: var(--ink);
+        font-weight: 500;
+        border-left-color: var(--blue);
+        background: rgba(31, 92, 139, 0.07);
+      }
+
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 18px 24px 0;
+        border-top: 1px solid var(--rule);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .rail-label {
+        font-size: 12px;
+        color: var(--ink-3);
+        margin-bottom: 5px;
+      }
+      .rail-value {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink);
+      }
+
+      /* ─────────── VIEWS ─────────── */
+      .view {
+        display: none;
+        padding: 40px 48px 72px;
+        max-width: 1240px;
+      }
+      .view.on {
+        display: block;
+      }
+
+      h2 {
+        font-size: 27px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        margin-bottom: 4px;
+      }
+      .view-intro {
+        color: var(--ink-2);
+        font-size: 14.5px;
+        margin-bottom: 34px;
+        max-width: 62ch;
+      }
+
+      /* Panels: square corners = structure. Radius is reserved for controls. */
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        padding: 22px 24px;
+        margin-bottom: 22px;
+      }
+
+      .sec {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink-2);
+        margin-bottom: 12px;
+      }
+
+      /* ─────────── CONTROLS (radius = touchable) ─────────── */
+      input[type="text"],
+      select,
+      textarea {
+        width: 100%;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        color: var(--ink);
+        padding: 9px 12px;
+        font-family: inherit;
+        font-size: 14.5px;
+        outline: none;
+        transition: border-color 0.12s;
+      }
+      input[type="text"]::placeholder,
+      textarea::placeholder {
+        color: var(--ink-3);
+      }
+      input[type="text"]:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(31, 92, 139, 0.14);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 112px;
+        line-height: 1.55;
+      }
+      select {
+        appearance: none;
+        background-image: url('data:image/svg+xml;utf8,<svg fill="%234A5D6E" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+        background-repeat: no-repeat;
+        background-position: calc(100% - 8px) center;
+        padding-right: 32px;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--blue);
+        cursor: pointer;
+      }
+
+      button {
+        width: 100%;
+        padding: 9px 18px;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14.5px;
+        font-weight: 500;
+        transition:
+          background 0.12s,
+          border-color 0.12s;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+      .btn-p {
+        background: var(--blue);
+        color: #fff;
+      }
+      .btn-p:hover {
+        background: var(--blue-d);
+      }
+      .btn-p:disabled {
+        opacity: 0.45;
+        cursor: wait;
+      }
+      .btn-s {
+        background: #fff;
+        color: var(--ink);
+        border-color: var(--rule);
+      }
+      .btn-s:hover {
+        border-color: var(--ink-2);
+      }
+      .btn-s:disabled {
+        opacity: 0.45;
+        cursor: wait;
+      }
+      .btn-g {
+        background: var(--ink);
+        color: #fff;
+      }
+      .btn-g:hover {
+        background: #1d3546;
+      }
+      .btn-g:disabled {
+        opacity: 0.45;
+        cursor: wait;
+      }
+
+      /* ─────────── SEGMENTED ─────────── */
+      .algo-row {
+        display: flex;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        overflow: hidden;
+        background: #fff;
+      }
+      .algo-btn {
+        flex: 1;
+        padding: 8px 4px;
+        font-size: 13.5px;
+        color: var(--ink-2);
+        cursor: pointer;
+        text-align: center;
+        transition:
+          background 0.12s,
+          color 0.12s;
+        border-right: 1px solid var(--rule);
+      }
+      .algo-btn:last-child {
+        border-right: none;
+      }
+      .algo-btn.on {
+        background: var(--blue);
+        color: #fff;
+        font-weight: 500;
+      }
+
+      /* ─────────── LATENCY READOUT (signature moment on Search) ─────────── */
+      .metric-card {
+        background: var(--ink);
+        border: 1px solid var(--ink);
+        padding: 30px 24px;
+        margin-bottom: 22px;
+        display: flex;
+        align-items: baseline;
+        gap: 22px;
+        flex-wrap: wrap;
+      }
+      .lat-big {
+        font-family: var(--mono);
+        font-size: 52px;
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+      .lat-caption {
+        color: #93a7b6;
+        font-size: 13.5px;
+      }
+      .lat-sub {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+      .chip {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        padding: 3px 9px;
+        border: 1px solid #35505f;
+        border-radius: 3px;
+        color: #b8c9d6;
+      }
+
+      /* ─────────── SEARCH GRID ─────────── */
+      .search-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        align-items: start;
+      }
+      .search-col {
+        display: flex;
+        flex-direction: column;
+      }
+      @media (max-width: 1060px) {
+        .search-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .plot-panel {
+        height: 392px;
+        border: 1px solid var(--rule);
+        background: var(--panel);
+      }
+      #scatter {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* ─────────── RESULTS ─────────── */
+      .results {
+        display: flex;
+        flex-direction: column;
+      }
+      .rcard {
+        border-top: 1px solid var(--rule-2);
+        padding: 13px 0;
+      }
+      .rcard:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+      .rrank {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        margin-bottom: 4px;
+      }
+      .rmeta {
+        font-size: 14.5px;
+        line-height: 1.45;
+        margin-bottom: 9px;
+      }
+      .rfoot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .rcat {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 3px;
+        border: 1px solid;
+      }
+      .rdist {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink-3);
+        flex: 1;
+      }
+      .del {
+        width: auto;
+        padding: 3px 10px;
+        font-size: 12px;
+        background: transparent;
+        color: var(--ink-3);
+        border: 1px solid var(--rule);
+      }
+      .del:hover {
+        color: var(--oxide);
+        border-color: var(--oxide);
+      }
+
+      /* ─────────── BENCH / LAYERS ─────────── */
+      .bench {
+        display: flex;
+        flex-direction: column;
+        gap: 13px;
+      }
+      .brow {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .blabel {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+      }
+      .blabel span:last-child {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink-2);
+      }
+      .btrack {
+        height: 7px;
+        background: #dde3e9;
+      }
+      .bfill {
+        height: 100%;
+        transition: width 0.45s ease;
+      }
+      .layers {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .lrow {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 12.5px;
+      }
+      .lnum {
+        width: 22px;
+        text-align: right;
+        font-family: var(--mono);
+        color: var(--blue);
+      }
+      .ltrack {
+        flex: 1;
+        height: 6px;
+        background: #dde3e9;
+      }
+      .lfill {
+        height: 100%;
+        background: var(--blue);
+        transition: width 0.35s;
+      }
+      .lcount {
+        width: 92px;
+        text-align: right;
+        font-family: var(--mono);
+        color: var(--ink-3);
+      }
+      #vecCvs {
+        display: block;
+        width: 100%;
+        border: 1px solid var(--rule);
+      }
+
+      /* ─────────── LEGEND ─────────── */
+      .legend {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .leg-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13.5px;
+        color: var(--ink-2);
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        flex-shrink: 0;
+      }
+
+      /* ─────────── DOCUMENTS ─────────── */
+      .doc-list {
+        display: flex;
+        flex-direction: column;
+      }
+      .dcard {
+        border-top: 1px solid var(--rule-2);
+        padding: 15px 0;
+      }
+      .dcard:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+      .dcard-title {
+        font-size: 15.5px;
+        font-weight: 500;
+        margin-bottom: 5px;
+      }
+      .dcard-preview {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        line-height: 1.55;
+        margin-bottom: 11px;
+        max-width: 74ch;
+      }
+      .dcard-foot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dcard-words {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--blue);
+        border: 1px solid var(--rule);
+        padding: 2px 8px;
+        border-radius: 3px;
+      }
+      .dcard-meta {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--ink-3);
+        flex: 1;
+      }
+
+      /* ─────────── STATUS ─────────── */
+      .ollama-status {
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--rule);
+        padding: 11px 12px;
+        font-size: 12.5px;
+        line-height: 1.65;
+        color: var(--ink-2);
+        background: #fff;
+      }
+      .ollama-status.ok {
+        border-left-color: var(--moss);
+      }
+      .ollama-status.err {
+        border-left-color: var(--oxide);
+      }
+      .status-line {
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .status-line.ok {
+        color: var(--moss);
+      }
+      .status-line.err {
+        color: var(--oxide);
+      }
+      #ollamaBadge {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 2px 8px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        color: var(--ink-3);
+      }
+      #ollamaBadge.ok {
+        color: var(--moss);
+        border-color: var(--moss);
+      }
+      #ollamaBadge.err {
+        color: var(--oxide);
+        border-color: var(--oxide);
+      }
+      .msg-ok {
+        color: var(--moss);
+      }
+      .msg-err {
+        color: var(--oxide);
+      }
+
+      /* ─────────── CHAT ─────────── */
+      .chat-history {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding-bottom: 28px;
+      }
+      .chat-q {
+        background: var(--ink);
+        color: #fff;
+        border-radius: 3px;
+        padding: 13px 16px;
+        font-size: 14.5px;
+        line-height: 1.55;
+        align-self: flex-end;
+        max-width: 66ch;
+      }
+      .chat-a {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--blue);
+        padding: 18px 20px;
+        align-self: flex-start;
+        max-width: 78ch;
+        width: 100%;
+      }
+      .chat-a-label {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--blue);
+        margin-bottom: 10px;
+      }
+      .chat-a-label.err {
+        color: var(--oxide);
+      }
+      .chat-a-text {
+        font-size: 14.5px;
+        line-height: 1.72;
+        white-space: pre-wrap;
+      }
+      .chat-ctx {
+        margin-top: 15px;
+        border-top: 1px solid var(--rule-2);
+        padding-top: 11px;
+      }
+      .chat-ctx-label {
+        font-size: 12px;
+        color: var(--ink-3);
+        margin-bottom: 8px;
+      }
+      .ctx-chip {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        padding: 3px 9px;
+        margin: 3px 4px 3px 0;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .ctx-chip:hover {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+      .ctx-expand {
+        display: none;
+        font-size: 12.5px;
+        color: var(--ink-2);
+        line-height: 1.65;
+        margin-top: 8px;
+        padding: 11px 12px;
+        background: #fff;
+        border: 1px solid var(--rule-2);
+      }
+      .thinking {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13.5px;
+        color: var(--ink-3);
+        padding: 14px 0;
+      }
+      .spinner {
+        width: 13px;
+        height: 13px;
+        border: 2px solid var(--rule);
+        border-top-color: var(--blue);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .typing::after {
+        content: "_";
+        animation: blink 1s step-end infinite;
+        color: var(--blue);
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* ─────────── TOOLTIP ─────────── */
+      #tip {
+        position: fixed;
+        display: none;
+        background: var(--ink);
+        color: #e6edf2;
+        border-radius: 3px;
+        padding: 9px 12px;
+        font-size: 12.5px;
+        pointer-events: none;
+        max-width: 260px;
+        z-index: 200;
+        line-height: 1.5;
+      }
+
+      /* ─────────── SYSTEM: the block map is the signature element ─────────── */
+      .disk-grid {
+        display: grid;
+        grid-template-columns: repeat(64, 1fr);
+        gap: 2px;
+        border: 1px solid var(--rule);
+        padding: 8px;
+        background: #fff;
+      }
+      .disk-cell {
+        aspect-ratio: 1;
+        max-height: 15px;
+        background: #e4e9ed;
+      }
+      .disk-cell.used {
+        background: var(--blue);
+      }
+
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+      .data-table th {
+        text-align: left;
+        padding: 8px 10px;
+        color: var(--ink-3);
+        font-weight: 400;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--sans);
+        font-size: 12.5px;
+      }
+      .data-table td {
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--rule-2);
+        color: var(--ink);
+      }
+      .data-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .acl-result {
+        padding: 12px 15px;
+        font-size: 14px;
+        margin-top: 12px;
+        border: 1px solid;
+        border-left-width: 3px;
+      }
+      .acl-result.allowed {
+        background: rgba(62, 107, 79, 0.06);
+        border-color: var(--moss);
+        color: var(--moss);
+      }
+      .acl-result.blocked {
+        background: rgba(168, 68, 36, 0.06);
+        border-color: var(--oxide);
+        color: var(--oxide);
+      }
+
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .row-tight {
+        display: flex;
+        gap: 10px;
+      }
+      .note {
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      .w-auto {
+        width: auto;
+      }
+
+      ::-webkit-scrollbar {
+        width: 9px;
+        height: 9px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--paper);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--rule);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--ink-3);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <!-- ══ SIDEBAR ══ -->
+      <div class="sidebar">
+        <div class="logo">
+          <h1>Testudo</h1>
+          <p>storage engine</p>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-item on" onclick="switchTab('search')">
+            Search vectors
+          </div>
+          <div class="nav-item" onclick="switchTab('docs')">Documents</div>
+          <div class="nav-item" onclick="switchTab('rag')">Ask AI</div>
+          <div class="nav-item" onclick="switchTab('insert')">
+            Insert vector
+          </div>
+          <div class="nav-item" onclick="switchTab('system')">System</div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div>
+            <div class="rail-label">Index</div>
+            <div class="rail-value" id="statsLabel">loading</div>
+          </div>
+          <div>
+            <div class="rail-label">Model runtime</div>
+            <div id="ollamaBadge">checking</div>
+          </div>
+          <div class="ollama-status" id="ollamaStatus">
+            Checking the local model server.
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ MAIN ══ -->
+      <div class="main-content">
+        <!-- TAB: SEARCH -->
+        <div class="view on" id="view-search">
+          <h2>Search vectors</h2>
+          <p class="view-intro">
+            Type a phrase and the engine finds the nearest stored vectors.
+            Switch the index to see how brute force, a KD-tree, and a navigable
+            small-world graph differ on the same query.
+          </p>
+
+          <div class="metric-card">
+            <div>
+              <div class="lat-big" id="latBig">&mdash;</div>
+              <div class="lat-caption">time to return the nearest matches</div>
+            </div>
+            <div class="lat-sub" id="latSub">
+              <span class="chip">awaiting query</span>
+            </div>
+          </div>
+
+          <div class="search-grid">
+            <div class="search-col">
+              <div class="card">
+                <div class="sec">Query</div>
+                <div
+                  class="row-tight"
+                  style="flex-direction: column; gap: 12px"
+                >
+                  <input
+                    type="text"
+                    id="qInput"
+                    placeholder="binary tree, sushi, basketball"
+                  />
+                  <button class="btn-p" onclick="runSearch()">Search</button>
+                </div>
+
+                <div class="sec" style="margin-top: 24px">Index</div>
+                <div class="algo-row">
+                  <div
+                    class="algo-btn on"
+                    data-algo="hnsw"
+                    onclick="setAlgo(this)"
+                  >
+                    HNSW
+                  </div>
+                  <div
+                    class="algo-btn"
+                    data-algo="kdtree"
+                    onclick="setAlgo(this)"
+                  >
+                    KD-tree
+                  </div>
+                  <div
+                    class="algo-btn"
+                    data-algo="bruteforce"
+                    onclick="setAlgo(this)"
+                  >
+                    Brute force
+                  </div>
+                </div>
+
+                <div
+                  class="row"
+                  style="margin-top: 24px; gap: 18px; align-items: flex-start"
+                >
+                  <div style="flex: 1; min-width: 170px">
+                    <div class="sec">Distance</div>
+                    <select id="metric">
+                      <option value="cosine">Cosine similarity</option>
+                      <option value="euclidean">Euclidean distance</option>
+                      <option value="manhattan">Manhattan distance</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1; min-width: 170px">
+                    <div class="sec">
+                      Matches to return:
+                      <span class="font-mono" id="kLabel">5</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="kSlider"
+                      min="1"
+                      max="10"
+                      value="5"
+                      style="margin-top: 9px"
+                      oninput="
+                        document.getElementById('kLabel').textContent =
+                          this.value
+                      "
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="sec">Nearest matches</div>
+                <div class="results" id="results">
+                  <p class="note">Run a search to see results.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="search-col">
+              <div class="plot-panel" style="margin-bottom: 22px">
+                <canvas id="scatter"></canvas>
+              </div>
+
+              <div class="card">
+                <div class="sec">Categories</div>
+                <div class="legend">
+                  <div class="leg-row">
+                    <span class="dot" style="background: #1f5c8b"></span
+                    >Algorithms
+                  </div>
+                  <div class="leg-row">
+                    <span class="dot" style="background: #6b4e8c"></span
+                    >Mathematics
+                  </div>
+                  <div class="leg-row">
+                    <span class="dot" style="background: #a86a24"></span>Food
+                    and cooking
+                  </div>
+                  <div class="leg-row">
+                    <span class="dot" style="background: #3e6b4f"></span>Sports
+                    and games
+                  </div>
+                  <div class="leg-row">
+                    <span class="dot" style="background: #10202e"></span>Stored
+                    documents
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="sec">Query vector, 16 dimensions</div>
+                <canvas id="vecCvs" height="76"></canvas>
+              </div>
+
+              <div class="card">
+                <div
+                  class="row"
+                  style="justify-content: space-between; margin-bottom: 14px"
+                >
+                  <div class="sec" style="margin: 0">Index comparison</div>
+                  <button
+                    class="btn-s w-auto"
+                    onclick="runBenchmark()"
+                    style="padding: 6px 13px; font-size: 13px"
+                  >
+                    Run benchmark
+                  </button>
+                </div>
+                <div id="benchSec" style="display: none; margin-bottom: 22px">
+                  <div class="bench" id="benchBars"></div>
+                </div>
+
+                <div class="sec" style="margin-top: 14px">Graph layers</div>
+                <div class="layers" id="layers">
+                  <p class="note">Loading.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: DOCUMENTS -->
+        <div class="view" id="view-docs">
+          <h2>Documents</h2>
+          <p class="view-intro">
+            Text you store here is split into chunks, embedded, written across
+            simulated disk blocks, and recorded in the database with an owner
+            and a folder.
+          </p>
+
+          <div class="card" style="max-width: 780px">
+            <div class="sec">Store a document</div>
+            <div style="display: flex; flex-direction: column; gap: 13px">
+              <input type="text" id="docTitle" placeholder="Title" />
+              <div class="row-tight">
+                <input
+                  type="text"
+                  id="docDir"
+                  placeholder="Folder, e.g. os_notes/scheduling"
+                  style="flex: 1"
+                />
+                <select id="docAccess" style="flex: 1">
+                  <option value="owner">Owner, can delete</option>
+                  <option value="read_only">Read only</option>
+                </select>
+              </div>
+              <textarea
+                id="docText"
+                placeholder="Paste notes, a textbook excerpt, or lecture content."
+              ></textarea>
+              <p class="note">
+                Long text is split into overlapping chunks. Each chunk gets its
+                own embedding.
+              </p>
+              <button
+                class="btn-g"
+                id="insertDocBtn"
+                onclick="insertDocument()"
+              >
+                Store document
+              </button>
+              <div id="insertStatus" class="note"></div>
+            </div>
+          </div>
+
+          <div class="card" style="max-width: 780px">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div class="sec" style="margin: 0">Stored</div>
+              <span class="dcard-words" id="docCountLabel">0</span>
+            </div>
+            <div class="doc-list" id="docList">
+              <p class="note">
+                Nothing stored yet. Add something above to get started.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: ASK AI -->
+        <div class="view" id="view-rag">
+          <h2>Ask AI</h2>
+          <p class="view-intro">
+            Questions are answered from your stored documents. The engine
+            retrieves the closest chunks, checks that you have permission to see
+            them, and passes only those to the language model.
+          </p>
+
+          <div style="max-width: 840px">
+            <div class="card">
+              <div class="sec">Question</div>
+              <div style="display: flex; flex-direction: column; gap: 13px">
+                <textarea
+                  id="ragQuestion"
+                  rows="3"
+                  placeholder="What is dynamic programming?"
+                ></textarea>
+                <div class="row-tight">
+                  <select id="ragK" style="width: 158px; flex-shrink: 0">
+                    <option value="2">2 chunks</option>
+                    <option value="3" selected>3 chunks</option>
+                    <option value="5">5 chunks</option>
+                  </select>
+                  <button
+                    class="btn-p"
+                    id="askBtn"
+                    onclick="askAI()"
+                    style="flex: 1"
+                  >
+                    Ask
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sec">Conversation</div>
+            <div class="chat-history" id="chatHistory" data-empty="true">
+              <p class="note">
+                Ask something about the documents you have stored.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: INSERT VECTOR -->
+        <div class="view" id="view-insert">
+          <h2>Insert vector</h2>
+          <p class="view-intro">
+            A scratch space for testing the indexes. Vectors added here are
+            16-dimensional stand-ins, kept separate from your real documents.
+          </p>
+
+          <div class="card" style="max-width: 560px">
+            <div class="sec">New test vector</div>
+            <div style="display: flex; flex-direction: column; gap: 13px">
+              <input
+                type="text"
+                id="addMeta"
+                placeholder="Describe the vector"
+              />
+              <select id="addCat">
+                <option value="cs">Algorithms</option>
+                <option value="math">Mathematics</option>
+                <option value="food">Food and cooking</option>
+                <option value="sports">Sports and games</option>
+              </select>
+              <button class="btn-p" onclick="addVector()">Add vector</button>
+              <p class="note">
+                Added vectors show up on the Search tab so you can compare how
+                each index finds them.
+              </p>
+            </div>
+          </div>
+
+          <div class="card" style="max-width: 560px">
+            <div class="sec">Generate many at once</div>
+            <p class="note" style="margin-bottom: 13px; max-width: 60ch">
+              HNSW's advantage over brute force only shows up once there's
+              enough data that avoiding full comparisons actually matters. At a
+              few dozen vectors, brute force wins on raw simplicity. Generate a
+              batch here, then re-run the benchmark on Search.
+            </p>
+            <div class="row-tight">
+              <input type="text" id="bulkCount" value="500" style="flex: 1" />
+              <button
+                class="btn-g"
+                id="bulkBtn"
+                onclick="bulkGenerate()"
+                style="flex: 2"
+              >
+                Generate vectors
+              </button>
+            </div>
+            <p class="note" id="bulkStatus" style="margin-top: 10px"></p>
+          </div>
+        </div>
+
+        <!-- TAB: SYSTEM -->
+        <div class="view" id="view-system">
+          <h2>System</h2>
+          <p class="view-intro">
+            What sits underneath the search: where bytes physically land on the
+            simulated disk, the order the head reads them in, who is allowed to
+            see what, and the relational tables tying it together.
+          </p>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">Block map</div>
+                <p class="note" id="diskStats">
+                  Every square is one block of the simulated disk.
+                </p>
+              </div>
+              <button
+                class="btn-s w-auto"
+                onclick="loadDiskGrid()"
+                style="padding: 6px 13px; font-size: 13px"
+              >
+                Refresh
+              </button>
+            </div>
+            <div id="diskGrid" class="disk-grid"></div>
+            <div class="row" style="margin-top: 12px; gap: 18px">
+              <span class="note"
+                ><span
+                  class="dot"
+                  style="
+                    background: #1f5c8b;
+                    display: inline-block;
+                    margin-right: 6px;
+                  "
+                ></span
+                >allocated</span
+              >
+              <span class="note"
+                ><span
+                  class="dot"
+                  style="
+                    background: #e4e9ed;
+                    display: inline-block;
+                    margin-right: 6px;
+                  "
+                ></span
+                >free</span
+              >
+            </div>
+          </div>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">
+                  Allocation table
+                </div>
+                <p class="note">
+                  Each block points to the next one in its file, so a file can
+                  be scattered and still read back in order.
+                </p>
+              </div>
+              <button
+                class="btn-s w-auto"
+                onclick="loadFatTable()"
+                style="padding: 6px 13px; font-size: 13px"
+              >
+                Load
+              </button>
+            </div>
+            <div id="fatTableBox">
+              <p class="note">
+                Load the table to see the chain for every stored file.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">Head movement</div>
+                <p class="note">
+                  The same pending blocks, serviced in six different orders. The
+                  head starts at the middle request.
+                </p>
+              </div>
+              <button
+                class="btn-p w-auto"
+                onclick="runAllScheduling()"
+                style="padding: 6px 15px; font-size: 13px"
+              >
+                Run all six
+              </button>
+            </div>
+            <p
+              class="note font-mono"
+              id="schedRange"
+              style="margin-bottom: 10px"
+            ></p>
+            <canvas
+              id="schedCanvas"
+              height="120"
+              style="
+                width: 100%;
+                display: block;
+                border: 1px solid var(--rule);
+                background: var(--panel);
+              "
+            ></canvas>
+          </div>
+
+          <div class="card">
+            <div class="sec" style="margin-bottom: 3px">Permissions</div>
+            <p class="note" style="margin-bottom: 14px; max-width: 70ch">
+              Documents belong to <span class="font-mono">harsh</span>, who is
+              granted access when they are stored. A second account,
+              <span class="font-mono">guest</span>, starts with nothing. Run the
+              same query as each to see the check take effect.
+            </p>
+            <div class="row-tight" style="margin-bottom: 14px">
+              <input
+                type="text"
+                id="newUsername"
+                placeholder="New username"
+                style="flex: 2"
+              />
+              <button
+                class="btn-s w-auto"
+                onclick="addUser()"
+                style="padding: 6px 13px; font-size: 13px"
+              >
+                Add user
+              </button>
+            </div>
+            <div class="row-tight" style="margin-bottom: 2px">
+              <select id="aclUser" style="flex: 1">
+                <option value="harsh">harsh</option>
+                <option value="guest">guest</option>
+              </select>
+              <input
+                type="text"
+                id="aclQuestion"
+                placeholder="Ask something the documents cover"
+                style="flex: 2"
+              />
+              <button
+                class="btn-p w-auto"
+                onclick="runAclTest()"
+                style="padding: 9px 18px; flex-shrink: 0"
+              >
+                Check access
+              </button>
+            </div>
+            <div id="aclResult"></div>
+          </div>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">
+                  Database tables
+                </div>
+                <p class="note">
+                  Live rows, including joins across accounts, folders,
+                  documents, and permissions.
+                </p>
+              </div>
+              <button
+                class="btn-s w-auto"
+                onclick="loadDbmsExplorer()"
+                style="padding: 6px 13px; font-size: 13px"
+              >
+                Load
+              </button>
+            </div>
+            <div id="dbmsExplorer">
+              <p class="note">
+                Load to see the current contents of every table.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">
+                  View and trigger
+                </div>
+                <p class="note" style="max-width: 70ch">
+                  document_summary is a real SQL VIEW, not a query repeated in
+                  code. deletion_audit is written only by a TRIGGER — delete a
+                  document on the Documents tab, then reload here to see it
+                  appear automatically.
+                </p>
+              </div>
+              <button
+                class="btn-s w-auto"
+                onclick="loadViewAndAudit()"
+                style="padding: 6px 13px; font-size: 13px"
+              >
+                Load
+              </button>
+            </div>
+            <div id="viewAuditBox">
+              <p class="note">
+                Load to see the view's output and any trigger-logged deletions.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div
+              class="row"
+              style="justify-content: space-between; margin-bottom: 14px"
+            >
+              <div>
+                <div class="sec" style="margin-bottom: 3px">
+                  CPU scheduling (demo)
+                </div>
+                <p class="note" style="max-width: 70ch">
+                  This project doesn't manage real OS processes, so this runs
+                  against a fixed example set of four processes — the same
+                  honest-simulation approach as the Search Vectors tab.
+                </p>
+              </div>
+            </div>
+            <div class="algo-row" style="margin-bottom: 14px">
+              <div
+                class="algo-btn on"
+                data-cpu="fcfs"
+                onclick="setCpuAlgo(this)"
+              >
+                FCFS
+              </div>
+              <div class="algo-btn" data-cpu="sjf" onclick="setCpuAlgo(this)">
+                SJF
+              </div>
+              <div
+                class="algo-btn"
+                data-cpu="priority"
+                onclick="setCpuAlgo(this)"
+              >
+                Priority
+              </div>
+              <div class="algo-btn" data-cpu="rr" onclick="setCpuAlgo(this)">
+                Round Robin
+              </div>
+            </div>
+            <button
+              class="btn-p w-auto"
+              onclick="runCpuSchedule()"
+              style="margin-bottom: 14px"
+            >
+              Run
+            </button>
+            <p
+              class="note font-mono"
+              id="cpuStats"
+              style="margin-bottom: 10px"
+            ></p>
+            <canvas
+              id="cpuCanvas"
+              height="90"
+              style="
+                width: 100%;
+                display: block;
+                border: 1px solid var(--rule);
+                background: var(--panel);
+              "
+            ></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tip"></div>
+
+    <script>
+      // ════════════════════════════════════════════════════════════
+      //  CONSTANTS
+      // ════════════════════════════════════════════════════════════
+      const API = "http://localhost:8080";
+      const DIMS = 16;
+      const COL = {
+        cs: "#1F5C8B",
+        math: "#6B4E8C",
+        food: "#A86A24",
+        sports: "#3E6B4F",
+        doc: "#10202E",
+        default: "#8A99A6",
+      };
+      const DIM_COL = [
+        "#1F5C8B",
+        "#1F5C8B",
+        "#1F5C8B",
+        "#1F5C8B",
+        "#6B4E8C",
+        "#6B4E8C",
+        "#6B4E8C",
+        "#6B4E8C",
+        "#A86A24",
+        "#A86A24",
+        "#A86A24",
+        "#A86A24",
+        "#3E6B4F",
+        "#3E6B4F",
+        "#3E6B4F",
+        "#3E6B4F",
+      ];
+
+      // ════════════════════════════════════════════════════════════
+      //  STATE
+      // ════════════════════════════════════════════════════════════
+      let allItems = [],
+        pcaPoints = [],
+        hitIds = new Set(),
+        queryPt = null;
+      let hoverItem = null,
+        pulse = 0,
+        selAlgo = "hnsw",
+        searchResults = [];
+
+      // ════════════════════════════════════════════════════════════
+      //  TABS
+      // ════════════════════════════════════════════════════════════
+      function switchTab(name) {
+        document.querySelectorAll(".nav-item").forEach((t, i) => {
+          const names = ["search", "docs", "rag", "insert", "system"];
+          t.classList.toggle("on", names[i] === name);
+        });
+        document
+          .querySelectorAll(".view")
+          .forEach((c) => c.classList.remove("on"));
+        document.getElementById("view-" + name).classList.add("on");
+        if (name === "docs") loadDocList();
+        if (name === "rag") loadChatHistory();
+        if (name === "system") {
+          primeDiskGrid();
+          primeSchedCanvas();
+          refreshUserDropdown();
+        }
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  TEXT → 16-D EMBEDDING (for demo vectors)
+      // ════════════════════════════════════════════════════════════
+      const KW = {
+        cs: [
+          "algorithm",
+          "data",
+          "tree",
+          "graph",
+          "array",
+          "linked",
+          "hash",
+          "stack",
+          "queue",
+          "sort",
+          "binary",
+          "dynamic",
+          "programming",
+          "recursion",
+          "complexity",
+          "pointer",
+          "node",
+          "search",
+          "insert",
+          "bfs",
+          "dfs",
+          "heap",
+          "trie",
+        ],
+        math: [
+          "calculus",
+          "matrix",
+          "probability",
+          "theorem",
+          "integral",
+          "derivative",
+          "linear",
+          "algebra",
+          "equation",
+          "function",
+          "prime",
+          "modular",
+          "combinatorics",
+          "permutation",
+          "eigenvalue",
+          "statistics",
+          "proof",
+        ],
+        food: [
+          "food",
+          "pizza",
+          "sushi",
+          "ramen",
+          "pasta",
+          "recipe",
+          "cook",
+          "eat",
+          "restaurant",
+          "dish",
+          "ingredient",
+          "flavor",
+          "spice",
+          "noodle",
+          "bread",
+          "croissant",
+          "taco",
+          "fish",
+          "rice",
+          "soup",
+        ],
+        sports: [
+          "sport",
+          "basketball",
+          "football",
+          "tennis",
+          "chess",
+          "swim",
+          "game",
+          "play",
+          "score",
+          "team",
+          "athlete",
+          "competition",
+          "match",
+          "tournament",
+          "olympic",
+          "dribble",
+          "tackle",
+          "serve",
+        ],
+      };
+
+      function textToEmbedding(text) {
+        const t = text.toLowerCase(),
+          ws = t.split(/\s+/);
+        const s = { cs: 0, math: 0, food: 0, sports: 0 };
+        for (const w of ws)
+          for (const [cat, kws] of Object.entries(KW))
+            for (const kw of kws)
+              if (w.includes(kw) || kw.startsWith(w)) {
+                s[cat] += 0.35;
+                break;
+              }
+        const mx = Math.max(...Object.values(s), 0.01);
+        const n = (v) => Math.min((v / mx) * 0.88, 0.94);
+        const jitter = () => (Math.random() - 0.5) * 0.04;
+        const emb = new Array(16).fill(0.08);
+        const fill = (i, score) => {
+          if (score < 0.01) return;
+          const b = n(score);
+          emb[i] = Math.max(0.05, b + jitter());
+          emb[i + 1] = Math.max(0.05, b + jitter());
+          emb[i + 2] = Math.max(0.05, b * 0.92 + jitter());
+          emb[i + 3] = Math.max(0.05, b * 0.87 + jitter());
+        };
+        fill(0, s.cs);
+        fill(4, s.math);
+        fill(8, s.food);
+        fill(12, s.sports);
+        return emb;
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  PCA
+      // ════════════════════════════════════════════════════════════
+      function pca2D(embs) {
+        const n = embs.length,
+          d = embs[0].length;
+        if (n < 2) return embs.map(() => [0, 0]);
+        const mean = new Array(d).fill(0);
+        for (const e of embs) for (let i = 0; i < d; i++) mean[i] += e[i] / n;
+        const X = embs.map((e) => e.map((v, i) => v - mean[i]));
+        function powerIter(X, excl) {
+          let v = new Array(d).fill(0).map(() => Math.random() - 0.5);
+          if (excl) {
+            let dot = v.reduce((s, vi, i) => s + vi * excl[i], 0);
+            v = v.map((vi, i) => vi - dot * excl[i]);
+          }
+          let nrm = Math.sqrt(v.reduce((s, vi) => s + vi * vi, 0));
+          v = v.map((vi) => vi / nrm);
+          for (let it = 0; it < 200; it++) {
+            const Xv = X.map((xi) =>
+              xi.reduce((s, xij, j) => s + xij * v[j], 0),
+            );
+            const nv = new Array(d).fill(0);
+            for (let k = 0; k < n; k++)
+              for (let j = 0; j < d; j++) nv[j] += X[k][j] * Xv[k];
+            if (excl) {
+              let dot = nv.reduce((s, vi, i) => s + vi * excl[i], 0);
+              for (let i = 0; i < d; i++) nv[i] -= dot * excl[i];
+            }
+            nrm = Math.sqrt(nv.reduce((s, vi) => s + vi * vi, 0));
+            if (nrm < 1e-10) break;
+            const prev = v.slice();
+            v = nv.map((vi) => vi / nrm);
+            if (v.reduce((s, vi, i) => s + (vi - prev[i]) ** 2, 0) < 1e-12)
+              break;
+          }
+          return v;
+        }
+        const pc1 = powerIter(X, null),
+          pc2 = powerIter(X, pc1);
+        return X.map((x) => [
+          x.reduce((s, v, i) => s + v * pc1[i], 0),
+          x.reduce((s, v, i) => s + v * pc2[i], 0),
+        ]);
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  SCATTER PLOT
+      // ════════════════════════════════════════════════════════════
+      const sc = document.getElementById("scatter"),
+        ctx = sc.getContext("2d");
+      let bounds = { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+
+      function resize() {
+        const r = sc.parentElement.getBoundingClientRect();
+        sc.width = r.width;
+        sc.height = r.height;
+      }
+      window.addEventListener("resize", resize);
+
+      function w2c(wx, wy) {
+        const P = 70,
+          W = sc.width,
+          H = sc.height,
+          rx = bounds.maxX - bounds.minX || 1,
+          ry = bounds.maxY - bounds.minY || 1;
+        return [
+          P + ((wx - bounds.minX) / rx) * (W - 2 * P),
+          H - P - ((wy - bounds.minY) / ry) * (H - 2 * P),
+        ];
+      }
+
+      function drawFrame() {
+        ctx.clearRect(0, 0, sc.width, sc.height);
+        ctx.fillStyle = "#F4F6F8";
+        ctx.fillRect(0, 0, sc.width, sc.height);
+        ctx.strokeStyle = "#D5DDE4";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 8; i++) {
+          const tx = 70 + (i / 8) * (sc.width - 140),
+            ty = 70 + (i / 8) * (sc.height - 140);
+          ctx.beginPath();
+          ctx.moveTo(tx, 70);
+          ctx.lineTo(tx, sc.height - 70);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(70, ty);
+          ctx.lineTo(sc.width - 70, ty);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#6B7C8C";
+        ctx.font = '11px "Space Mono",monospace';
+        ctx.fillText("component 1", sc.width / 2 - 40, sc.height - 18);
+        ctx.save();
+        ctx.translate(18, sc.height / 2 + 50);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText("component 2", 0, 0);
+        ctx.restore();
+        ctx.fillStyle = "#6B7C8C";
+        ctx.font = '12px "Space Mono",monospace';
+        ctx.fillText("principal components of the vector space", 80, 28);
+
+        if (queryPt && hitIds.size > 0) {
+          const [qx, qy] = w2c(queryPt.x, queryPt.y);
+          for (const pt of pcaPoints) {
+            if (!hitIds.has(pt.item.id)) continue;
+            const [px, py] = w2c(pt.x, pt.y);
+            ctx.strokeStyle = "rgba(31,92,139,0.30)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(qx, qy);
+            ctx.lineTo(px, py);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+        for (const pt of pcaPoints) {
+          const [cx, cy] = w2c(pt.x, pt.y);
+          const col = COL[pt.item.category] || COL.default;
+          const isHit = hitIds.has(pt.item.id),
+            r = isHit ? 10 : 7;
+          if (isHit) {
+            const pr = r + 7 + Math.sin(pulse) * 3.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, pr, 0, 2 * Math.PI);
+            ctx.strokeStyle = col + "55";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+          const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 3);
+          grd.addColorStop(0, col + (isHit ? "bb" : "88"));
+          grd.addColorStop(1, "transparent");
+          ctx.beginPath();
+          ctx.arc(cx, cy, r * 3, 0, 2 * Math.PI);
+          ctx.fillStyle = grd;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+          ctx.fillStyle = col;
+          ctx.fill();
+          if (hoverItem && hoverItem.id === pt.item.id) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        }
+        if (queryPt) {
+          const [qx, qy] = w2c(queryPt.x, queryPt.y);
+          ctx.save();
+          ctx.translate(qx, qy);
+          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          for (let i = 0; i < 10; i++) {
+            const a = (i * Math.PI) / 5 - Math.PI / 2,
+              rr = i % 2 === 0 ? 13 : 5;
+            if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+            else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          }
+          ctx.closePath();
+          ctx.fillStyle = "#10202E";
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.restore();
+          ctx.fillStyle = "#10202E";
+          ctx.font = '10px "Space Mono",monospace';
+          ctx.fillText("query", qx + 16, qy + 4);
+        }
+        if (!pcaPoints.length) {
+          ctx.fillStyle = "#6B7C8C";
+          ctx.font = '13px "Space Mono",monospace';
+          ctx.textAlign = "center";
+          ctx.fillText("waiting for the engine", sc.width / 2, sc.height / 2);
+          ctx.textAlign = "left";
+        }
+        pulse += 0.05;
+        requestAnimationFrame(drawFrame);
+      }
+
+      sc.addEventListener("mousemove", (e) => {
+        const rect = sc.getBoundingClientRect(),
+          mx = e.clientX - rect.left,
+          my = e.clientY - rect.top;
+        hoverItem = null;
+        let best = 18;
+        for (const pt of pcaPoints) {
+          const [cx, cy] = w2c(pt.x, pt.y),
+            d = Math.hypot(mx - cx, my - cy);
+          if (d < best) {
+            best = d;
+            hoverItem = pt.item;
+          }
+        }
+        const tip = document.getElementById("tip");
+        if (hoverItem) {
+          const col = COL[hoverItem.category] || COL.default;
+          tip.style.display = "block";
+          tip.style.left = e.clientX + 14 + "px";
+          tip.style.top = e.clientY - 8 + "px";
+          tip.innerHTML = `<span style="color:${col}">[${hoverItem.category}]</span><br>${hoverItem.metadata}`;
+        } else tip.style.display = "none";
+      });
+      sc.addEventListener("mouseleave", () => {
+        hoverItem = null;
+        document.getElementById("tip").style.display = "none";
+      });
+
+      // ════════════════════════════════════════════════════════════
+      //  LOAD DEMO ITEMS
+      // ════════════════════════════════════════════════════════════
+      async function loadItems() {
+        try {
+          const r = await fetch(API + "/items");
+          allItems = await r.json();
+          if (allItems.length >= 2) {
+            const coords = pca2D(allItems.map((v) => v.embedding));
+            pcaPoints = allItems.map((item, i) => ({
+              x: coords[i][0],
+              y: coords[i][1],
+              item,
+            }));
+            let x0 = Infinity,
+              x1 = -Infinity,
+              y0 = Infinity,
+              y1 = -Infinity;
+            for (const p of pcaPoints) {
+              x0 = Math.min(x0, p.x);
+              x1 = Math.max(x1, p.x);
+              y0 = Math.min(y0, p.y);
+              y1 = Math.max(y1, p.y);
+            }
+            const px = (x1 - x0) * 0.18 || 0.1,
+              py = (y1 - y0) * 0.18 || 0.1;
+            bounds = {
+              minX: x0 - px,
+              maxX: x1 + px,
+              minY: y0 - py,
+              maxY: y1 + py,
+            };
+          }
+          document.getElementById("statsLabel").textContent =
+            allItems.length + " vectors · " + DIMS + " dims";
+        } catch (_) {}
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  DEMO SEARCH
+      // ════════════════════════════════════════════════════════════
+      function setAlgo(el) {
+        document
+          .querySelectorAll(".algo-btn")
+          .forEach((b) => b.classList.remove("on"));
+        el.classList.add("on");
+        selAlgo = el.dataset.algo;
+      }
+
+      async function runSearch() {
+        const text = document.getElementById("qInput").value.trim();
+        if (!text) return;
+        const emb = textToEmbedding(text),
+          k = parseInt(document.getElementById("kSlider").value);
+        const metric = document.getElementById("metric").value;
+        const url = `${API}/search?v=${emb.join(",")}&k=${k}&metric=${metric}&algo=${selAlgo}`;
+        try {
+          const r = await fetch(url),
+            data = await r.json();
+          searchResults = data.results || [];
+          hitIds = new Set(searchResults.map((r) => r.id));
+          const us = data.latencyUs || 0;
+          document.getElementById("latBig").textContent =
+            us < 1000 ? us + " μs" : (us / 1000).toFixed(2) + " ms";
+          document.getElementById("latSub").innerHTML =
+            `<span class="chip">${selAlgo}</span><span class="chip">${metric}</span><span class="chip">k=${k}</span>`;
+          if (searchResults.length > 0) {
+            let sx = 0,
+              sy = 0,
+              sw = 0;
+            for (let i = 0; i < Math.min(3, searchResults.length); i++) {
+              const pt = pcaPoints.find(
+                (p) => p.item.id === searchResults[i].id,
+              );
+              if (pt) {
+                const w = 1 / (i + 1);
+                sx += pt.x * w;
+                sy += pt.y * w;
+                sw += w;
+              }
+            }
+            if (sw > 0)
+              queryPt = {
+                x: sx / sw + (Math.random() - 0.5) * 0.015,
+                y: sy / sw + (Math.random() - 0.5) * 0.015,
+              };
+          }
+          renderResults(searchResults);
+          drawVecChart(emb);
+        } catch (_) {
+          alert("Cannot reach server — is it running on :8080?");
+        }
+      }
+
+      document.getElementById("qInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") runSearch();
+      });
+
+      function renderResults(results) {
+        if (!results || !results.length) {
+          document.getElementById("results").innerHTML =
+            '<div style="color:var(--muted);font-size:11px">No results</div>';
+          return;
+        }
+        document.getElementById("results").innerHTML = results
+          .map((r, i) => {
+            const col = COL[r.category] || COL.default;
+            return `<div class="rcard" onmouseenter="hoverItem={id:${r.id}}" onmouseleave="hoverItem=null">
+      <div class="rrank">nearest ${i + 1}</div>
+      <div class="rmeta">${r.metadata}</div>
+      <div class="rfoot">
+        <span class="rcat" style="background:${col}18;color:${col};border:1px solid ${col}44">${r.category}</span>
+        <span class="rdist">dist: ${r.distance.toFixed(5)}</span>
+        <button class="del" onclick="deleteItem(${r.id})">Remove</button>
+      </div>
+    </div>`;
+          })
+          .join("");
+      }
+
+      function drawVecChart(emb) {
+        const vc = document.getElementById("vecCvs"),
+          W = vc.parentElement.clientWidth;
+        vc.width = W;
+        const vx = vc.getContext("2d");
+        vx.clearRect(0, 0, W, 76);
+        vx.fillStyle = "#F4F6F8";
+        vx.fillRect(0, 0, W, 76);
+        const bw = (W - 4) / DIMS;
+        for (let i = 0; i < DIMS; i++) {
+          const h = emb[i] * 58,
+            x = 2 + i * bw,
+            col = DIM_COL[i];
+          vx.fillStyle = col + "dd";
+          vx.fillRect(x + 1, 63 - h, bw - 2, h);
+        }
+        vx.shadowBlur = 0;
+        vx.font = "8px monospace";
+        vx.textAlign = "center";
+        [
+          ["CS", 0],
+          ["MATH", 4],
+          ["FOOD", 8],
+          ["SPORT", 12],
+        ].forEach(([lbl, gi], i) => {
+          vx.fillStyle = Object.values(COL)[i] + "77";
+          vx.fillText(lbl, 2 + (gi + 1.5) * bw, 74);
+        });
+        vx.textAlign = "left";
+      }
+
+      async function runBenchmark() {
+        const text =
+          document.getElementById("qInput").value.trim() ||
+          "binary tree algorithm";
+        const emb = textToEmbedding(text),
+          metric = document.getElementById("metric").value;
+        try {
+          const r = await fetch(
+            `${API}/benchmark?v=${emb.join(",")}&k=5&metric=${metric}`,
+          );
+          const d = await r.json();
+          document.getElementById("benchSec").style.display = "block";
+          const mx = Math.max(d.bruteforceUs, d.kdtreeUs, d.hnswUs, 1);
+          document.getElementById("benchBars").innerHTML = [
+            { lbl: "Brute force", us: d.bruteforceUs, col: "#A84424" },
+            { lbl: "KD-Tree", us: d.kdtreeUs, col: "#1F5C8B" },
+            { lbl: "HNSW", us: d.hnswUs, col: "#6B4E8C" },
+          ]
+            .map(({ lbl, us, col }) => {
+              const pct = Math.max((us / mx) * 100, 2),
+                disp = us < 1000 ? us + " μs" : (us / 1000).toFixed(2) + " ms";
+              return `<div class="brow"><div class="blabel"><span style="color:${col}">${lbl}</span><span style="color:var(--muted)">${disp}</span></div><div class="btrack"><div class="bfill" style="width:${pct}%;background:${col}"></div></div></div>`;
+            })
+            .join("");
+        } catch (_) {}
+      }
+
+      async function loadHNSW() {
+        try {
+          const r = await fetch(API + "/hnsw-info"),
+            d = await r.json();
+          const maxN = d.nodesPerLayer[0] || 1;
+          document.getElementById("layers").innerHTML =
+            d.nodesPerLayer
+              .map((cnt, lyr) => {
+                const pct = Math.max((cnt / maxN) * 100, 2),
+                  edg = d.edgesPerLayer[lyr] || 0;
+                return `<div class="lrow"><div class="lnum">L${lyr}</div><div class="ltrack"><div class="lfill" style="width:${pct}%"></div></div><div class="lcount">${cnt}n · ${edg}e</div></div>`;
+              })
+              .join("") ||
+            '<div style="color:var(--muted);font-size:11px">Empty</div>';
+        } catch (_) {}
+      }
+
+      async function addVector() {
+        const meta = document.getElementById("addMeta").value.trim(),
+          cat = document.getElementById("addCat").value;
+        if (!meta) return;
+        const emb = textToEmbedding(meta + " " + cat);
+        try {
+          await fetch(API + "/insert", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              metadata: meta,
+              category: cat,
+              embedding: emb,
+            }),
+          });
+          document.getElementById("addMeta").value = "";
+          await loadItems();
+          loadHNSW();
+        } catch (_) {}
+      }
+
+      // Generates many plausible vectors at once — real phrases built from the
+      // same category keywords the search side already understands, not random
+      // noise, so the resulting index still behaves like a real semantic space.
+      async function bulkGenerate() {
+        const countInput = document.getElementById("bulkCount");
+        const status = document.getElementById("bulkStatus");
+        const btn = document.getElementById("bulkBtn");
+        let count = parseInt(countInput.value, 10);
+        if (!count || count < 1) {
+          status.textContent = "Enter a number of vectors to generate.";
+          return;
+        }
+        count = Math.min(count, 5000);
+
+        const cats = Object.keys(KW);
+        btn.disabled = true;
+
+        const BATCH = 25; // send this many inserts concurrently, then wait, to avoid flooding the server
+        let done = 0;
+        for (let start = 0; start < count; start += BATCH) {
+          const batchSize = Math.min(BATCH, count - start);
+          const requests = [];
+          for (let i = 0; i < batchSize; i++) {
+            const cat = cats[(start + i) % cats.length];
+            const words = KW[cat];
+            const w1 = words[Math.floor(Math.random() * words.length)];
+            const w2 = words[Math.floor(Math.random() * words.length)];
+            const meta = `${w1} ${w2} #${start + i}`;
+            const emb = textToEmbedding(meta + " " + cat);
+            requests.push(
+              fetch(API + "/insert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  metadata: meta,
+                  category: cat,
+                  embedding: emb,
+                }),
+              }),
+            );
+          }
+          await Promise.all(requests);
+          done += batchSize;
+          status.textContent = `Generated ${done} of ${count}…`;
+        }
+
+        status.textContent = `Done — added ${count} vectors. Go to Search and re-run the benchmark.`;
+        btn.disabled = false;
+        await loadItems();
+        loadHNSW();
+      }
+
+      async function deleteItem(id) {
+        try {
+          await fetch(`${API}/delete/${id}`, { method: "DELETE" });
+          searchResults = searchResults.filter((r) => r.id !== id);
+          hitIds.delete(id);
+          renderResults(searchResults);
+          await loadItems();
+          loadHNSW();
+        } catch (_) {}
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  DOCUMENT MANAGEMENT
+      // ════════════════════════════════════════════════════════════
+      async function checkOllamaStatus() {
+        try {
+          const r = await fetch(API + "/status"),
+            d = await r.json();
+          const badge = document.getElementById("ollamaBadge");
+          const box = document.getElementById("ollamaStatus");
+          if (d.ollamaAvailable) {
+            badge.className = "badge ok";
+            badge.textContent = "Ollama connected";
+            box.className = "ollama-status ok";
+            box.innerHTML =
+              `<div class="status-line ok">Online</div>` +
+              `Embed: <span style="color:var(--accent)">${d.embedModel}</span><br>` +
+              `Generate: <span style="color:var(--accent)">${d.genModel}</span><br>` +
+              `Dims: <span style="color:var(--muted)">${d.docDims || "(first insert sets this)"}</span><br>` +
+              `Documents: <span style="color:var(--text)">${d.docCount}</span>`;
+          } else {
+            badge.className = "badge err";
+            badge.textContent = "Ollama offline";
+            box.className = "ollama-status err";
+            box.innerHTML =
+              `<div class="status-line err">Offline</div>` +
+              `To enable RAG features:<br>` +
+              `<span style="color:var(--muted)">1. Install from ollama.com<br>` +
+              `2. ollama pull nomic-embed-text<br>` +
+              `3. ollama pull llama3.2</span>`;
+          }
+        } catch (_) {}
+      }
+
+      async function insertDocument() {
+        const title = document.getElementById("docTitle").value.trim();
+        const text = document.getElementById("docText").value.trim();
+        const dir = document.getElementById("docDir").value.trim();
+        const access = document.getElementById("docAccess").value;
+        const btn = document.getElementById("insertDocBtn");
+        const status = document.getElementById("insertStatus");
+        if (!title || !text) {
+          status.textContent = "Add a title and some text to continue.";
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Embedding…";
+        status.innerHTML =
+          '<span style="color:var(--muted)">Calling Ollama nomic-embed-text…</span>';
+
+        try {
+          const r = await fetch(API + "/doc/insert", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, text, dir, access }),
+          });
+          const d = await r.json();
+          if (d.error) {
+            status.innerHTML = `<span class="msg-err">${d.error}</span>`;
+          } else {
+            status.innerHTML = `<span class="msg-ok">Stored ${d.chunks} chunk(s), ${d.dims}-dimension embeddings</span>`;
+            document.getElementById("docTitle").value = "";
+            document.getElementById("docText").value = "";
+            document.getElementById("docDir").value = "";
+
+            // Insert a 16D fake vector into the visualizer DB so it shows up on the map
+            const emb16 = textToEmbedding(title + " " + text);
+            fetch(API + "/insert", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                metadata: title,
+                category: "doc",
+                embedding: emb16,
+              }),
+            }).then(() => {
+              loadItems().then(loadHNSW);
+            });
+
+            loadDocList();
+            checkOllamaStatus();
+          }
+        } catch (_) {
+          status.innerHTML = '<span class="msg-err">Server error</span>';
+        }
+        btn.disabled = false;
+        btn.textContent = "Store document";
+      }
+
+      async function loadDocList() {
+        try {
+          const r = await fetch(API + "/doc/list"),
+            docs = await r.json();
+          document.getElementById("docCountLabel").textContent = docs.length;
+          if (!docs.length) {
+            document.getElementById("docList").innerHTML =
+              '<div style="color:var(--muted);font-size:11px">No documents yet.</div>';
+            return;
+          }
+          document.getElementById("docList").innerHTML = docs
+            .map(
+              (d, i) => `
+      <div class="dcard" style="animation-delay: ${i * 0.05}s">
+        <div class="dcard-title">${d.title}</div>
+        <div class="dcard-preview">${d.preview}</div>
+        <div class="dcard-foot">
+          <span class="dcard-words">${d.dir || "root"}</span><span class="dcard-meta">${d.words} words</span>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-s" onclick="shareDoc(${d.id})" style="width:auto; padding:4px 10px; font-size:11px;">Share</button>
+            <button class="del" onclick="deleteDoc(${d.id})">Remove</button>
+          </div>
+        </div>
+      </div>`,
+            )
+            .join("");
+        } catch (_) {}
+      }
+
+      async function shareDoc(id) {
+        const username = prompt(
+          "Share with which username? (any added user, e.g. guest)",
+          "guest",
+        );
+        if (!username) return;
+        const level = confirm("Grant OWNER access? (Cancel = read-only)")
+          ? "owner"
+          : "read_only";
+        try {
+          const r = await fetch(API + "/doc/share", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ docId: id, username, level }),
+          });
+          const d = await r.json();
+          alert(
+            d.ok
+              ? `Shared with ${username} (${level})`
+              : d.error || "Failed to share",
+          );
+        } catch (_) {
+          alert("Server error — is the backend running?");
+        }
+      }
+
+      async function deleteDoc(id) {
+        try {
+          const r = await fetch(`${API}/doc/delete/${id}`, {
+            method: "DELETE",
+          });
+          const d = await r.json();
+          if (!d.ok && d.error) {
+            alert(d.error);
+            return;
+          }
+          loadDocList();
+          checkOllamaStatus();
+        } catch (_) {}
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  RAG  — Ask AI
+      // ════════════════════════════════════════════════════════════
+      document
+        .getElementById("ragQuestion")
+        .addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && e.ctrlKey) askAI();
+        });
+
+      // Rebuilds the Ask AI conversation from SQLite — this is what makes the
+      // chat survive a page refresh instead of resetting to the placeholder text.
+      async function loadChatHistory() {
+        const history = document.getElementById("chatHistory");
+        try {
+          const r = await fetch(API + "/doc/logs");
+          const logs = await r.json();
+          if (!logs.length) {
+            history.dataset.empty = "true";
+            return; // keep the existing placeholder text as-is
+          }
+          history.dataset.empty = "false";
+          history.innerHTML = logs
+            .map(
+              (l) => `
+      <div class="chat-q">${l.question}</div>
+      <div class="chat-a">
+        <div class="chat-a-label">${l.timestamp}</div>
+        <div class="chat-a-text">${l.answer}</div>
+      </div>`,
+            )
+            .join("");
+          history.scrollTop = history.scrollHeight;
+        } catch (_) {
+          // server not reachable yet — leave whatever's currently shown
+        }
+      }
+
+      async function askAI() {
+        const question = document.getElementById("ragQuestion").value.trim();
+        if (!question) return;
+        const k = parseInt(document.getElementById("ragK").value);
+        const btn = document.getElementById("askBtn");
+        btn.disabled = true;
+        btn.textContent = "Thinking…";
+
+        const history = document.getElementById("chatHistory");
+        // Clear the placeholder text if this is the first real message
+        if (history.dataset.empty === "true") {
+          history.innerHTML = "";
+          history.dataset.empty = "false";
+        }
+
+        // Show question bubble
+        const qDiv = document.createElement("div");
+        qDiv.className = "chat-q";
+        qDiv.textContent = question;
+        history.appendChild(qDiv);
+
+        // Show thinking indicator
+        const thinkDiv = document.createElement("div");
+        thinkDiv.className = "thinking";
+        thinkDiv.innerHTML =
+          '<div class="spinner"></div>Retrieving context and writing an answer';
+        history.appendChild(thinkDiv);
+        history.scrollTop = history.scrollHeight;
+
+        // Update the scatter plot visualizer in the background using the real 768D DB
+        fetch(API + "/doc/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, k }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.contexts && data.contexts.length > 0) {
+              hitIds = new Set();
+              let sx = 0,
+                sy = 0,
+                sw = 0;
+              data.contexts.forEach((ctx, i) => {
+                // Match the RAG chunk title back to the visualizer document metadata
+                const pt = pcaPoints.find(
+                  (p) =>
+                    p.item.category === "doc" &&
+                    ctx.title.startsWith(p.item.metadata),
+                );
+                if (pt) {
+                  hitIds.add(pt.item.id);
+                  const w = 1 / (i + 1);
+                  sx += pt.x * w;
+                  sy += pt.y * w;
+                  sw += w;
+                }
+              });
+              if (sw > 0)
+                queryPt = {
+                  x: sx / sw + (Math.random() - 0.5) * 0.015,
+                  y: sy / sw + (Math.random() - 0.5) * 0.015,
+                };
+            } else {
+              hitIds = new Set();
+              // Fallback: If no RAG docs match, visually move the star to the 16D semantic space anyway!
+              const emb16 = textToEmbedding(question);
+              fetch(
+                `${API}/search?v=${emb16.join(",")}&k=3&metric=cosine&algo=hnsw`,
+              )
+                .then((res2) => res2.json())
+                .then((data2) => {
+                  if (data2.results && data2.results.length > 0) {
+                    let sx = 0,
+                      sy = 0,
+                      sw = 0;
+                    for (
+                      let i = 0;
+                      i < Math.min(3, data2.results.length);
+                      i++
+                    ) {
+                      const pt = pcaPoints.find(
+                        (p) => p.item.id === data2.results[i].id,
+                      );
+                      if (pt) {
+                        const w = 1 / (i + 1);
+                        sx += pt.x * w;
+                        sy += pt.y * w;
+                        sw += w;
+                      }
+                    }
+                    if (sw > 0)
+                      queryPt = {
+                        x: sx / sw + (Math.random() - 0.5) * 0.015,
+                        y: sy / sw + (Math.random() - 0.5) * 0.015,
+                      };
+                  }
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+
+        try {
+          const r = await fetch(API + "/doc/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question, k }),
+          });
+          const d = await r.json();
+          thinkDiv.remove();
+
+          const aDiv = document.createElement("div");
+          aDiv.className = "chat-a";
+
+          if (d.error) {
+            aDiv.innerHTML = `<div class="chat-a-label err">Error</div><div class="chat-a-text" style="color:var(--red)">${d.error}</div>`;
+          } else {
+            // Build answer block with typewriter
+            aDiv.innerHTML =
+              `<div class="chat-a-label">${d.model || "llm"}</div>` +
+              `<div class="chat-a-text" id="typeTarget"></div>` +
+              `<div class="chat-ctx">` +
+              `<div class="chat-ctx-label">Retrieved from ${d.contexts.length} chunk(s)</div>` +
+              d.contexts
+                .map(
+                  (c, i) =>
+                    `<span class="ctx-chip" onclick="toggleCtx(${i})">#${i + 1} ${c.title} · ${c.distance.toFixed(3)}</span>` +
+                    `<div class="ctx-expand" id="ctx-${i}">${c.text}</div>`,
+                )
+                .join("") +
+              `</div>`;
+            history.appendChild(aDiv);
+
+            // Typewriter effect
+            const target = aDiv.querySelector("#typeTarget");
+            target.classList.add("typing");
+            const full = d.answer;
+            let i = 0;
+            const timer = setInterval(() => {
+              if (i >= full.length) {
+                clearInterval(timer);
+                target.classList.remove("typing");
+                return;
+              }
+              const chunk = full.slice(i, i + 3);
+              target.textContent += chunk;
+              i += 3;
+              history.scrollTop = history.scrollHeight;
+            }, 18);
+          }
+
+          if (!d.error) {
+            /* already appended above */
+          } else history.appendChild(aDiv);
+        } catch (e) {
+          thinkDiv.remove();
+          const err = document.createElement("div");
+          err.className = "chat-a";
+          err.innerHTML =
+            '<div class="chat-a-label err">Error</div><div class="chat-a-text" style="color:var(--red)">Server error — is the backend running?</div>';
+          history.appendChild(err);
+        }
+
+        document.getElementById("ragQuestion").value = "";
+        btn.disabled = false;
+        btn.textContent = "Ask";
+        history.scrollTop = history.scrollHeight;
+      }
+
+      function toggleCtx(i) {
+        const el = document.getElementById("ctx-" + i);
+        el.style.display = el.style.display === "block" ? "none" : "block";
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  SYSTEM TAB — OS (disk, FAT, scheduling) + DBMS (ACL, explorer)
+      // ════════════════════════════════════════════════════════════
+
+      // Draws an empty disk straight away so the panel reads as "nothing
+      // allocated yet" instead of collapsing to an empty strip before the
+      // backend has been asked for anything.
+      function primeSchedCanvas() {
+        const cvs = document.getElementById("schedCanvas");
+        if (cvs.dataset.drawn === "true") return;
+        const W = cvs.parentElement.clientWidth || 800;
+        cvs.width = W;
+        cvs.height = 120;
+        const c = cvs.getContext("2d");
+        c.fillStyle = "#F4F6F8";
+        c.fillRect(0, 0, W, 120);
+        c.strokeStyle = "#C0CAD3";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(90, 60);
+        c.lineTo(W - 30, 60);
+        c.stroke();
+        c.fillStyle = "#6B7C8C";
+        c.font = '13px "Space Grotesk", sans-serif';
+        c.textAlign = "center";
+        c.fillText("Run the six algorithms to plot the head path", W / 2, 88);
+        c.textAlign = "left";
+      }
+
+      function primeDiskGrid(count = 512) {
+        const grid = document.getElementById("diskGrid");
+        if (grid.childElementCount) return;
+        grid.innerHTML = Array.from(
+          { length: count },
+          (_, i) => `<div class="disk-cell" title="block ${i}, free"></div>`,
+        ).join("");
+      }
+
+      async function loadDiskGrid() {
+        const grid = document.getElementById("diskGrid");
+        const stats = document.getElementById("diskStats");
+        stats.textContent = "Loading…";
+        try {
+          const r = await fetch(API + "/admin/fat-table");
+          const d = await r.json();
+          const usedIds = new Set(d.blocks.map((b) => b.id));
+          const showCount = Math.min(d.totalBlocks, 512); // first 512 blocks, for a readable grid
+          let html = "";
+          for (let i = 0; i < showCount; i++) {
+            html += `<div class="disk-cell${usedIds.has(i) ? " used" : ""}" title="block ${i}${usedIds.has(i) ? " (allocated)" : " (free)"}"></div>`;
+          }
+          grid.innerHTML = html;
+          stats.textContent = `${d.blocks.length} allocated / ${d.totalBlocks} total blocks (showing first ${showCount})`;
+        } catch (_) {
+          stats.textContent = "Server error — is the backend running?";
+        }
+      }
+
+      async function loadFatTable() {
+        const box = document.getElementById("fatTableBox");
+        box.textContent = "Loading…";
+        try {
+          const r = await fetch(API + "/admin/fat-table");
+          const d = await r.json();
+          if (!d.blocks || !d.blocks.length) {
+            box.textContent = `No blocks allocated yet. (${d.freeBlocks}/${d.totalBlocks} free)`;
+            return;
+          }
+          let html = `<table class="data-table"><tr><th>Block</th><th>Next</th><th>Data</th></tr>`;
+          d.blocks.forEach((b) => {
+            const nextLabel = b.next === -1 ? "END" : b.next;
+            html += `<tr><td>${b.id}</td><td>${nextLabel}</td><td>${b.data}</td></tr>`;
+          });
+          html += "</table>";
+          box.innerHTML = html;
+        } catch (_) {
+          box.textContent = "Server error — is the backend running?";
+        }
+      }
+
+      // Draws all 6 algorithms as stacked rows on ONE canvas, sharing a single
+      // x-scale so the paths are directly comparable — same idea as the classic
+      // textbook disk-scheduling diagram, just built from live backend data.
+      function drawAllSchedRows(canvas, results, rangeMin, rangeMax) {
+        const rowH = 78,
+          pad = 90,
+          topPad = 20;
+        const W = canvas.parentElement.clientWidth;
+        const H = topPad + results.length * rowH + 30;
+        canvas.width = W;
+        canvas.height = H;
+        const c = canvas.getContext("2d");
+        c.clearRect(0, 0, W, H);
+        c.fillStyle = "#F4F6F8";
+        c.fillRect(0, 0, W, H);
+
+        const span = Math.max(rangeMax - rangeMin, 1);
+        const x = (v) => pad + ((v - rangeMin) / span) * (W - pad - 30);
+
+        results.forEach((res, i) => {
+          const y = topPad + i * rowH + 24;
+          c.fillStyle = "#10202E";
+          c.font = '500 13px "Space Grotesk", sans-serif';
+          c.textAlign = "left";
+          c.fillText(res.label, 10, y + 4);
+
+          c.strokeStyle = "#C0CAD3";
+          c.lineWidth = 1;
+          c.beginPath();
+          c.moveTo(pad, y);
+          c.lineTo(W - 30, y);
+          c.stroke();
+
+          c.strokeStyle = "#1F5C8B";
+          c.lineWidth = 1.5;
+          let prev = res.headStart;
+          res.order.forEach((b) => {
+            c.beginPath();
+            c.moveTo(x(prev), y);
+            c.lineTo(x(b), y);
+            c.stroke();
+            const dir = b > prev ? -1 : 1;
+            c.beginPath();
+            c.moveTo(x(b), y);
+            c.lineTo(x(b) + dir * 6, y - 4);
+            c.lineTo(x(b) + dir * 6, y + 4);
+            c.closePath();
+            c.fillStyle = "#1F5C8B";
+            c.fill();
+            prev = b;
+          });
+
+          res.order.forEach((b) => {
+            c.beginPath();
+            c.arc(x(b), y, 4, 0, 2 * Math.PI);
+            c.fillStyle = "#1F5C8B";
+            c.fill();
+            c.fillStyle = "#6B7C8C";
+            c.font = '10px "Space Mono",monospace';
+            c.textAlign = "center";
+            c.fillText(String(b), x(b), y - 10);
+          });
+
+          c.beginPath();
+          c.arc(x(res.headStart), y, 5, 0, 2 * Math.PI);
+          c.fillStyle = "#A84424";
+          c.fill();
+
+          c.fillStyle = "#6B7C8C";
+          c.font = '11px "Space Mono",monospace';
+          c.textAlign = "left";
+          const orderStr = res.order.length
+            ? `${res.headStart} → ${res.order.join(" → ")}`
+            : "no pending blocks";
+          c.fillText(orderStr, pad, y + 24);
+        });
+
+        // shared axis at the bottom
+        const axisY = H - 14;
+        c.fillStyle = "#6B7C8C";
+        c.font = '10px "Space Mono",monospace';
+        c.textAlign = "left";
+        c.fillText(String(rangeMin), pad - 4, axisY);
+        c.textAlign = "right";
+        c.fillText(String(rangeMax), W - 30, axisY);
+        c.textAlign = "left";
+      }
+
+      async function runAllScheduling() {
+        const algos = [
+          { key: "fcfs", label: "FCFS" },
+          { key: "sstf", label: "SSTF" },
+          { key: "scan", label: "SCAN" },
+          { key: "cscan", label: "C-SCAN" },
+          { key: "look", label: "LOOK" },
+          { key: "clook", label: "C-LOOK" },
+        ];
+        document.getElementById("schedRange").textContent =
+          "Reading the pending blocks";
+
+        const results = [];
+        for (const a of algos) {
+          try {
+            const r = await fetch(`${API}/admin/reload?algo=${a.key}`);
+            const d = await r.json();
+            results.push({
+              label: a.label,
+              headStart: d.headStart,
+              order: (d.order || []).map((o) => o.blockId),
+            });
+          } catch (_) {
+            results.push({ label: a.label, headStart: 0, order: [] });
+          }
+        }
+
+        const allVals = results.flatMap((r) => [r.headStart, ...r.order]);
+        if (!allVals.length) {
+          document.getElementById("schedRange").textContent =
+            "Store a document first, then there will be blocks to schedule.";
+          return;
+        }
+        const rangeMin = Math.min(...allVals);
+        const rangeMax = Math.max(...allVals);
+        document.getElementById("schedRange").textContent =
+          `blocks ${rangeMin} to ${rangeMax}`;
+
+        const cvs = document.getElementById("schedCanvas");
+        cvs.dataset.drawn = "true";
+        drawAllSchedRows(cvs, results, rangeMin, rangeMax);
+      }
+
+      async function runAclTest() {
+        const user = document.getElementById("aclUser").value;
+        const question =
+          document.getElementById("aclQuestion").value.trim() ||
+          "what did I write about?";
+        const box = document.getElementById("aclResult");
+        box.className = "";
+        box.textContent = "Checking…";
+        try {
+          const r = await fetch(API + "/doc/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question, k: 5, user }),
+          });
+          const d = await r.json();
+          const contexts = d.contexts || [];
+          if (contexts.length > 0) {
+            box.className = "acl-result allowed";
+            const names = contexts.map((c) => c.title.split(" [")[0]);
+            const unique = [...new Set(names)];
+            box.innerHTML = `<strong>${user}</strong> can see: ${unique.join(", ")}`;
+          } else {
+            box.className = "acl-result blocked";
+            box.innerHTML = `<strong>${user}</strong> sees nothing — ACL blocked access (or nothing matched).`;
+          }
+        } catch (_) {
+          box.className = "acl-result blocked";
+          box.textContent = "Server error — is the backend running?";
+        }
+      }
+
+      // Creates a real account beyond the two hardcoded demo users, and
+      // refreshes the dropdown so it's immediately usable in the ACL test.
+      async function addUser() {
+        const input = document.getElementById("newUsername");
+        const username = input.value.trim();
+        if (!username) return;
+        try {
+          const r = await fetch(API + "/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username }),
+          });
+          const d = await r.json();
+          if (d.error) {
+            alert(d.error);
+            return;
+          }
+          input.value = "";
+          await refreshUserDropdown();
+          document.getElementById("aclUser").value = username;
+        } catch (_) {
+          alert("Server error — is the backend running?");
+        }
+      }
+
+      async function refreshUserDropdown() {
+        try {
+          const r = await fetch(API + "/admin/users");
+          const users = await r.json();
+          const select = document.getElementById("aclUser");
+          const current = select.value;
+          select.innerHTML = users
+            .map((u) => `<option value="${u.username}">${u.username}</option>`)
+            .join("");
+          if (users.some((u) => u.username === current)) select.value = current;
+        } catch (_) {}
+      }
+
+      // Loads the document_summary VIEW and the trigger-populated
+      // deletion_audit table, side by side.
+      async function loadViewAndAudit() {
+        const box = document.getElementById("viewAuditBox");
+        box.innerHTML = '<p class="note">Loading…</p>';
+        try {
+          const [viewRes, auditRes] = await Promise.all([
+            fetch(API + "/admin/document-view"),
+            fetch(API + "/admin/deletion-audit"),
+          ]);
+          const viewRows = await viewRes.json();
+          const auditRows = await auditRes.json();
+
+          const table = (title, rows, cols) => {
+            if (!rows.length)
+              return `<div style="margin-bottom:20px;"><div style="font-weight:600; margin-bottom:8px;">${title}</div><p class="note">empty</p></div>`;
+            let html = `<div style="margin-bottom:20px;"><div style="font-weight:600; margin-bottom:8px;">${title}</div><table class="data-table"><tr>`;
+            cols.forEach((c) => (html += `<th>${c.label}</th>`));
+            html += "</tr>";
+            rows.forEach((row) => {
+              html += "<tr>";
+              cols.forEach((c) => (html += `<td>${row[c.key]}</td>`));
+              html += "</tr>";
+            });
+            html += "</table></div>";
+            return html;
+          };
+
+          let out = "";
+          out += table("document_summary (VIEW)", viewRows, [
+            { key: "docId", label: "Doc ID" },
+            { key: "title", label: "Title" },
+            { key: "owner", label: "Owner" },
+            { key: "folder", label: "Folder" },
+            { key: "startBlock", label: "Start block" },
+          ]);
+          out += table("deletion_audit (written only by TRIGGER)", auditRows, [
+            { key: "auditId", label: "Audit ID" },
+            { key: "docId", label: "Doc ID" },
+            { key: "title", label: "Deleted title" },
+            { key: "deletedAt", label: "Deleted at" },
+          ]);
+          box.innerHTML = out;
+        } catch (_) {
+          box.innerHTML =
+            '<p class="note">Server error — is the backend running?</p>';
+        }
+      }
+
+      // ── CPU scheduling demo ──
+      let selCpuAlgo = "fcfs";
+      function setCpuAlgo(el) {
+        document
+          .querySelectorAll("#view-system .algo-btn")
+          .forEach((b) => b.classList.remove("on"));
+        el.classList.add("on");
+        selCpuAlgo = el.dataset.cpu;
+      }
+
+      function drawGantt(canvas, gantt) {
+        const W = canvas.parentElement.clientWidth,
+          H = 90;
+        canvas.width = W;
+        canvas.height = H;
+        const c = canvas.getContext("2d");
+        c.clearRect(0, 0, W, H);
+        c.fillStyle = "#F4F6F8";
+        c.fillRect(0, 0, W, H);
+        if (!gantt.length) return;
+        const maxT = Math.max(...gantt.map((g) => g.end));
+        const pad = 20;
+        const x = (t) => pad + (t / maxT) * (W - pad * 2);
+        const colors = ["#1F5C8B", "#6B4E8C", "#A86A24", "#3E6B4F", "#A84424"];
+        const barY = 30,
+          barH = 28;
+
+        gantt.forEach((slice) => {
+          const x0 = x(slice.start),
+            x1 = x(slice.end);
+          const col = colors[(slice.processId - 1) % colors.length];
+          c.fillStyle = col + "22";
+          c.fillRect(x0, barY, x1 - x0, barH);
+          c.strokeStyle = col;
+          c.lineWidth = 1.5;
+          c.strokeRect(x0, barY, x1 - x0, barH);
+          c.fillStyle = col;
+          c.font = '11px "Space Mono",monospace';
+          c.textAlign = "center";
+          c.fillText("P" + slice.processId, (x0 + x1) / 2, barY + 18);
+        });
+
+        c.fillStyle = "#6B7C8C";
+        c.font = '10px "Space Mono",monospace';
+        c.textAlign = "left";
+        c.fillText("0", pad - 4, barY + barH + 16);
+        c.textAlign = "right";
+        c.fillText(String(maxT), W - pad, barY + barH + 16);
+        c.textAlign = "left";
+      }
+
+      async function runCpuSchedule() {
+        const stats = document.getElementById("cpuStats");
+        stats.textContent = "Running…";
+        try {
+          const r = await fetch(`${API}/admin/cpu-schedule?algo=${selCpuAlgo}`);
+          const d = await r.json();
+          stats.textContent = `${d.scheduler} — avg waiting time ${d.avgWaiting}, avg turnaround time ${d.avgTurnaround}`;
+          drawGantt(document.getElementById("cpuCanvas"), d.gantt || []);
+        } catch (_) {
+          stats.textContent = "Server error — is the backend running?";
+        }
+      }
+
+      async function loadDbmsExplorer() {
+        const box = document.getElementById("dbmsExplorer");
+        box.textContent = "Loading…";
+        try {
+          const r = await fetch(API + "/admin/dbms-explorer");
+          const d = await r.json();
+
+          const table = (title, rows, cols) => {
+            if (!rows.length)
+              return `<div style="margin-bottom:18px;"><div style="font-weight:600; margin-bottom:6px;">${title}</div><div style="color:var(--muted); font-size:12px;">empty</div></div>`;
+            let html = `<div style="margin-bottom:18px;"><div style="font-weight:600; margin-bottom:8px;">${title}</div><table class="data-table"><tr>`;
+            cols.forEach((c) => (html += `<th>${c.label}</th>`));
+            html += "</tr>";
+            rows.forEach((row) => {
+              html += "<tr>";
+              cols.forEach((c) => (html += `<td>${row[c.key]}</td>`));
+              html += "</tr>";
+            });
+            html += "</table></div>";
+            return html;
+          };
+
+          let out = "";
+          out += table("users", d.users, [
+            { key: "id", label: "ID" },
+            { key: "username", label: "Username" },
+          ]);
+          out += table("directories", d.directories, [
+            { key: "id", label: "ID" },
+            { key: "name", label: "Name" },
+            { key: "parent", label: "Parent" },
+          ]);
+          out += table(
+            "documents (joined: documents ⋈ users ⋈ directories)",
+            d.documents,
+            [
+              { key: "id", label: "Doc ID" },
+              { key: "title", label: "Title" },
+              { key: "owner", label: "Owner" },
+              { key: "dir", label: "Directory" },
+              { key: "block", label: "Start block" },
+            ],
+          );
+          out += table(
+            "file_permissions (joined: permissions ⋈ documents ⋈ users)",
+            d.permissions,
+            [
+              { key: "docId", label: "Doc ID" },
+              { key: "docTitle", label: "Title" },
+              { key: "username", label: "User" },
+              { key: "level", label: "Access level" },
+            ],
+          );
+          box.innerHTML = out;
+        } catch (_) {
+          box.textContent = "Server error — is the backend running?";
+        }
+      }
+
+      // ════════════════════════════════════════════════════════════
+      //  BOOT
+      // ════════════════════════════════════════════════════════════
+      resize();
+      drawFrame();
+      loadItems().then(loadHNSW);
+      checkOllamaStatus();
+      loadChatHistory();
+    </script>
+  </body>
+</html>
