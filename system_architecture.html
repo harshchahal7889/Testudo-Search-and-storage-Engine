@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Architecture — AI-Powered Semantic Search Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a2e;
+    --accent: #4f46e5;
+    --accent2: #7c3aed;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --card-bg: #f8fafc;
+    --note-bg: #eff6ff;
+    --note-border: #3b82f6;
+    --tip-bg: #f0fdf4;
+    --tip-border: #22c55e;
+    --important-bg: #fefce8;
+    --important-border: #eab308;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 48px 60px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 44px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+
+  .diagram-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    margin: 16px 0 32px 0;
+    overflow-x: auto;
+    page-break-inside: avoid;
+  }
+  .diagram-card .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+
+  .callout {
+    border-left: 4px solid;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0 28px 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    page-break-inside: avoid;
+  }
+  .callout-note { background: var(--note-bg); border-color: var(--note-border); }
+  .callout-tip { background: var(--tip-bg); border-color: var(--tip-border); }
+  .callout-important { background: var(--important-bg); border-color: var(--important-border); }
+  .callout strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 32px 0;
+    font-size: 14px;
+    page-break-inside: avoid;
+  }
+  th {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 16px;
+  }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:nth-child(even) td { background: var(--card-bg); }
+
+  @media print {
+    body { padding: 24px 32px; }
+    .diagram-card { break-inside: avoid; }
+    .callout { break-inside: avoid; }
+    table { break-inside: avoid; }
+    h2 { break-after: avoid; }
+  }
+
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>System Architecture</h1>
+<p class="subtitle">AI-Powered Semantic Search Engine for Intelligent File Retrieval &nbsp;&middot;&nbsp; Team T312 (Testudo) &nbsp;&middot;&nbsp; Phase 2</p>
+
+<!-- ═══════════════════════════════════════ -->
+<h2>1 &nbsp; High-Level Component Overview</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+graph TB
+    subgraph CLIENT["Client / User"]
+        REQ["REST API Requests\n(cpp-httplib)"]
+    end
+
+    subgraph BACKEND["C++ Backend Server"]
+        direction TB
+        API["REST API Layer\n(cpp-httplib)"]
+        MTX["Single Mutex\n(Concurrency Control)"]
+
+        subgraph AI_LAYER["AI Module"]
+            EMB["Embedding Engine\n(nomic-embed-text via Ollama)"]
+            SEARCH["Semantic Search"]
+            RAG["RAG Pipeline\n(llama3.2 via Ollama)"]
+            BF["Brute Force"]
+            KDT["KD-Tree"]
+            HNSW["HNSW"]
+        end
+
+        subgraph OS_LAYER["OS Module"]
+            VDISK["Virtual Disk Simulator"]
+            FAT["FAT-Style Block Allocator"]
+            SCHED["Disk Scheduling Algorithms"]
+            FCFS["FCFS"]
+            SSTF["SSTF"]
+            SCAN_A["SCAN"]
+            CSCAN["C-SCAN"]
+            LOOK_A["LOOK"]
+            CLOOK["C-LOOK"]
+        end
+
+        subgraph DB_LAYER["DBMS Module"]
+            SQLITE["SQLite Database"]
+            SCHEMA["9-Table Relational Schema"]
+            IDX["Indexing"]
+            TXN["Transactions"]
+            VW["SQL View"]
+            TRG["Trigger\n(Deletion Audit)"]
+            ACL["Access Control\n(Owner / Read-Only)"]
+        end
+    end
+
+    subgraph OLLAMA["Ollama - Local LLM Server"]
+        NOM["nomic-embed-text\n(Embedding Model)"]
+        LLM["llama3.2\n(Generation Model)"]
+    end
+
+    REQ <-->|"HTTP"| API
+    API --- MTX
+    MTX --> AI_LAYER
+    MTX --> OS_LAYER
+    MTX --> DB_LAYER
+
+    SEARCH --> BF
+    SEARCH --> KDT
+    SEARCH --> HNSW
+
+    SCHED --> FCFS
+    SCHED --> SSTF
+    SCHED --> SCAN_A
+    SCHED --> CSCAN
+    SCHED --> LOOK_A
+    SCHED --> CLOOK
+
+    EMB <-->|"Embed"| NOM
+    RAG <-->|"Generate"| LLM
+
+    FAT <-->|"Read / Write"| VDISK
+    SCHED -->|"I/O Order"| VDISK
+
+    EMB -->|"Store Vector"| SQLITE
+    EMB -->|"Store Blocks"| FAT
+    SEARCH -->|"Retrieve Vectors"| SQLITE
+    SEARCH -->|"ACL Filter"| ACL
+    RAG -->|"Retrieve Chunks"| SEARCH
+    RAG -->|"Persist History"| SQLITE
+
+    SCHEMA --- IDX
+    SCHEMA --- TXN
+    SCHEMA --- VW
+    SCHEMA --- TRG
+    SCHEMA --- ACL
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="page-break"></div>
+<h2>2 &nbsp; Data Flow — Document Upload &amp; Semantic Search</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant API as REST API
+    participant AI as AI Module
+    participant OL as Ollama
+    participant DB as SQLite
+    participant OS as Virtual Disk
+
+    Note over U,OS: Document Upload Flow
+    U->>API: POST /upload (text file)
+    API->>API: Acquire mutex
+    API->>AI: Split text into overlapping chunks
+    loop Each Chunk
+        AI->>OL: Embed chunk (nomic-embed-text)
+        OL-->>AI: Vector embedding
+        AI->>DB: INSERT embedding + metadata
+        AI->>OS: Allocate disk blocks (FAT chain)
+        OS->>OS: Write chunk data to blocks
+    end
+    API->>DB: INSERT document record, set owner ACL
+    API-->>U: 201 Created
+
+    Note over U,OS: Semantic Search Flow
+    U->>API: GET /search?q="car"
+    API->>API: Acquire mutex
+    API->>AI: Embed query (nomic-embed-text)
+    AI->>OL: "car" → query vector
+    OL-->>AI: Query vector
+    AI->>DB: Fetch stored embeddings
+    AI->>AI: Cosine similarity (Brute / KD / HNSW)
+    AI->>DB: ACL check per result
+    AI-->>API: Ranked, permitted results
+    API-->>U: 200 OK — results (includes "automobile" doc)
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<h2>3 &nbsp; Data Flow — RAG Question Answering</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant API as REST API
+    participant AI as AI Module
+    participant OL as Ollama
+    participant DB as SQLite
+
+    U->>API: POST /ask { question, conversation_id }
+    API->>API: Acquire mutex
+    API->>AI: Embed question
+    AI->>OL: question → vector (nomic-embed-text)
+    OL-->>AI: Query vector
+    AI->>DB: Retrieve closest permitted chunks
+    AI->>DB: Load conversation history
+    AI->>OL: Prompt = chunks + history + question (llama3.2)
+    OL-->>AI: Generated answer
+    AI->>DB: Persist Q&A to conversation history
+    API-->>U: 200 OK — answer
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="page-break"></div>
+<h2>4 &nbsp; Database Schema (9 Tables)</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+erDiagram
+    USERS {
+        int user_id PK
+        text username UK
+        text password_hash
+    }
+    DIRECTORIES {
+        int dir_id PK
+        text name
+        int parent_dir_id FK
+        int owner_id FK
+    }
+    DOCUMENTS {
+        int doc_id PK
+        text filename
+        int dir_id FK
+        int owner_id FK
+        text created_at
+    }
+    EMBEDDINGS {
+        int embedding_id PK
+        int doc_id FK
+        int chunk_index
+        blob vector
+        int start_block
+    }
+    PERMISSIONS {
+        int perm_id PK
+        int doc_id FK
+        int user_id FK
+        text access_level
+    }
+    QUERY_LOGS {
+        int log_id PK
+        int user_id FK
+        text query_text
+        text timestamp
+    }
+    CONVERSATIONS {
+        int conv_id PK
+        int user_id FK
+        text created_at
+    }
+    CONVERSATION_MESSAGES {
+        int msg_id PK
+        int conv_id FK
+        text role
+        text content
+        text timestamp
+    }
+    DELETION_AUDIT {
+        int audit_id PK
+        int doc_id
+        text filename
+        text deleted_at
+    }
+
+    USERS ||--o{ DOCUMENTS : "owns"
+    USERS ||--o{ DIRECTORIES : "owns"
+    USERS ||--o{ PERMISSIONS : "granted to"
+    USERS ||--o{ QUERY_LOGS : "logs"
+    USERS ||--o{ CONVERSATIONS : "has"
+    DIRECTORIES ||--o{ DIRECTORIES : "nests"
+    DIRECTORIES ||--o{ DOCUMENTS : "contains"
+    DOCUMENTS ||--o{ EMBEDDINGS : "has chunks"
+    DOCUMENTS ||--o{ PERMISSIONS : "controlled by"
+    CONVERSATIONS ||--o{ CONVERSATION_MESSAGES : "has"
+    DOCUMENTS ||--o{ DELETION_AUDIT : "trigger logs"
+</pre>
+</div>
+
+<div class="callout callout-note">
+  <strong>📝 Note</strong>
+  The <b>DELETION_AUDIT</b> table is populated exclusively by a <b>SQL trigger</b> — no application-level INSERT is needed. A <b>SQL view</b> also exposes a joined perspective across documents and permissions for simplified access-control queries.
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="page-break"></div>
+<h2>5 &nbsp; OS Module — Virtual Disk &amp; Scheduling</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+graph LR
+    subgraph DISK["Virtual Disk - Simulated"]
+        direction LR
+        B0["Block 0"] --> B1["Block 1"] --> B2["Block 2"] --> B3["Block 3"] --> B4["..."] --> BN["Block N"]
+    end
+
+    subgraph FAT_TABLE["FAT Table"]
+        direction TB
+        F0["0 → 1"]
+        F1["1 → 3"]
+        F2["2 → EOF"]
+        F3["3 → EOF"]
+    end
+
+    subgraph SCHEDULING["Disk Scheduling"]
+        direction TB
+        Q["Request Queue\n82, 170, 43, 140, 24, 16, 190"]
+        HEAD["Disk Head Position\n(starts at median)"]
+        ALG["Algorithm Selector"]
+        R1["FCFS"]
+        R2["SSTF"]
+        R3["SCAN"]
+        R4["C-SCAN"]
+        R5["LOOK"]
+        R6["C-LOOK"]
+    end
+
+    FAT_TABLE -->|"Chain lookup"| DISK
+    Q --> HEAD --> ALG
+    ALG --> R1
+    ALG --> R2
+    ALG --> R3
+    ALG --> R4
+    ALG --> R5
+    ALG --> R6
+</pre>
+</div>
+
+<div class="callout callout-important">
+  <strong>⚠️ Important</strong>
+  The disk head is initialised to the <b>median</b> of the pending request queue — not zero — so that SCAN and LOOK exhibit genuinely different traversal behaviour from each other.
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<h2>6 &nbsp; Concurrency Model</h2>
+<div class="diagram-card">
+<pre class="mermaid">
+graph TD
+    R1["Request 1"] --> MTX["Single Mutex"]
+    R2["Request 2"] --> MTX
+    R3["Request N"] --> MTX
+    MTX -->|"Exclusive Access"| CS["Critical Section\n(Disk + DB + Vectors)"]
+    CS --> RELEASE["Unlock"]
+</pre>
+</div>
+
+<div class="callout callout-tip">
+  <strong>💡 Tip</strong>
+  A <b>single coarse-grained mutex</b> is used deliberately instead of fine-grained locks. This eliminates all deadlock risk at the cost of some throughput — an acceptable trade-off given the project's scope.
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<h2>7 &nbsp; Technology Stack</h2>
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Language</b></td><td>C++</td><td>Core backend logic</td></tr>
+    <tr><td><b>HTTP Server</b></td><td>cpp-httplib</td><td>REST API exposure</td></tr>
+    <tr><td><b>Database</b></td><td>SQLite</td><td>Metadata, embeddings, ACL, logs</td></tr>
+    <tr><td><b>Embedding Model</b></td><td>nomic-embed-text (Ollama)</td><td>Text → vector conversion</td></tr>
+    <tr><td><b>LLM</b></td><td>llama3.2 (Ollama)</td><td>RAG answer generation</td></tr>
+    <tr><td><b>Search Algorithms</b></td><td>Brute Force / KD-Tree / HNSW</td><td>Nearest-neighbour vector search</td></tr>
+    <tr><td><b>Concurrency</b></td><td>std::mutex</td><td>Thread-safe shared state</td></tr>
+    <tr><td><b>Persistence</b></td><td>Disk file + SQLite WAL</td><td>Survives full server restart</td></tr>
+  </tbody>
+</table>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#e0e7ff',
+      primaryTextColor: '#1e1b4b',
+      primaryBorderColor: '#6366f1',
+      secondaryColor: '#fef3c7',
+      tertiaryColor: '#f0fdf4',
+      lineColor: '#6366f1',
+      textColor: '#1a1a2e',
+      fontSize: '14px',
+      fontFamily: 'Inter, sans-serif'
+    },
+    flowchart: { curve: 'basis', padding: 16 },
+    sequence: { mirrorActors: false, messageAlign: 'center' }
+  });
+</script>
+
+</body>
+</html>
