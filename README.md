@@ -1,4 +1,4 @@
-# Testudo — AI-Powered Semantic Search Engine for Intelligent File Retrieval
+# Testudo — AI-Powered Semantic Search Engine for Intelligent File Retrieval.
 
 A search engine that finds files by meaning, not exact keywords. Searching "car" finds a document that only says "automobile," because both get compared as vectors, not as text strings.
 
