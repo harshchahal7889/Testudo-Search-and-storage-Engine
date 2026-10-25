@@ -1,4 +1,4 @@
-# Testudo — AI-Powered Semantic Search Engine for Intelligent File Retrieval.
+# Testudo — AI-Powered Semantic Search Engine for Intelligent File Retrieval
 
 A search engine that finds files by meaning, not exact keywords. Searching "car" finds a document that only says "automobile," because both get compared as vectors, not as text strings.
 
@@ -53,10 +53,18 @@ See [`HOW_TO_RUN.md`](./HOW_TO_RUN.md) for full setup. Short version:
 ollama pull nomic-embed-text
 ollama pull llama3.2
 
-# Compile
-g++ -std=c++17 -O2 main.cpp -o db -lws2_32 -lsqlite3
+# Build with CMake
+cmake -B build
+cmake --build build
 
-# Run
+# Run (from the folder holding index.html)
+./build/semantic_search
+```
+
+Prefer a one-line compile? That still works:
+
+```bash
+g++ -std=c++17 -O2 -I src -I . src/main.cpp -o db -lsqlite3 -lpthread   # add -lws2_32 on Windows
 ./db
 ```
 
@@ -64,33 +72,71 @@ Then open `index.html` in a browser. The backend listens on `localhost:8080`.
 
 ## Project structure
 
+The backend is split into one module per layer, matching the original design proposal:
+
 ```
-main.cpp        — REST API, request handling, all endpoint logic
-storage.h       — VirtualDisk, DiskScheduler, CpuScheduler, DBMSLayer
-httplib.h       — third-party HTTP library (cpp-httplib)
-index.html      — frontend, single self-contained file
-nlp_engine/     — standalone Python embedding script (all-MiniLM-L6-v2, not currently wired into the live pipeline)
-accuracy_comparison.py — compares TF-IDF against the real semantic search
+src/
+  main.cpp              — entry point + REST API routing only
+  os/
+    virtual_disk.h      — fixed-size blocks + FAT-style chaining
+    disk_scheduler.h    — FCFS, SSTF, SCAN, C-SCAN, LOOK, C-LOOK
+    cpu_scheduler.h     — FCFS, SJF, Priority, Round Robin (demo)
+  dbms/
+    dbms_layer.h        — SQLite schema, indexes, view, trigger, ACL
+  ai/
+    distance.h          — vector type + cosine/euclidean/manhattan
+    brute_force.h       — exhaustive search
+    kd_tree.h           — k-d tree index
+    hnsw.h              — HNSW graph index
+    chunker.h           — overlapping text chunker
+    ollama_client.h     — local Ollama embed/generate client
+    vector_db.h         — demo 16-D index (Search Vectors tab)
+    document_db.h       — real document index over Ollama embeddings
+  api/
+    json_util.h         — JSON helpers + CORS
+    demo_data.h         — seed vectors for the demo tab
+CMakeLists.txt          — cross-platform build
+httplib.h               — third-party HTTP library (cpp-httplib)
+index.html              — frontend, single self-contained file
+nlp_engine/             — standalone Python embedding script (all-MiniLM-L6-v2, not wired into the live pipeline)
+accuracy_comparison.py  — compares TF-IDF against the real semantic search
 ```
 
-A module split into `os_module/`, `database/`, `interface/` matching the original design proposal is planned but not yet done — see [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md).
+The earlier single-file version (`main.cpp` + `storage.h` at the root) has been split into the tree above. Each header owns one concern, and `main.cpp` now holds only routing and the restart-recovery sequence.
+
+## Benchmarks
+
+Search timing on the same query at the current scale (~20–30 vectors):
+
+| Index | Time |
+|---|---|
+| KD-tree | 21 µs |
+| Brute force | 37 µs |
+| HNSW | 118 µs |
+
+HNSW is slowest here on purpose, not by accident — its graph-traversal overhead only pays off once the dataset is large enough that a full scan becomes the expensive option. At this scale, scanning a handful of vectors directly wins.
 
 ## Known limitations
 
-- Two demo user accounts by default (`harsh`, `guest`); more can be added through the System tab, but there's no real login system
-- No content-editing endpoint — only create and delete
-- LOOK and C-LOOK produce the same output as SCAN and C-SCAN in the current simulation, since the model doesn't track the disk's physical boundary as a distinct stop
-- SQLite has no stored procedures; the equivalent logic lives in `DBMSLayer`'s C++ methods instead
+- **Scalability.** The vector index lives entirely in memory and is rebuilt on every restart, so the whole dataset must fit in RAM. This is fine at academic scale but doesn't match a production vector database (FAISS, Chroma) that keeps the index on disk. The fix is a disk-backed, shardable index.
+- **Ask AI is slow on CPU.** The `llama3.2` answer generation is heavy and runs fast only with a GPU; on a CPU-only machine it's slow. Embedding and search themselves stay fast. A smaller model (`llama3.2:1b`) helps.
+- **Deletion is disk-bound.** Each delete rewrites the whole virtual-disk file and commits SQLite, so it pauses on slow drives.
+- **No login or encryption.** Accounts are plain usernames added through the System tab; there's no password auth, and data isn't encrypted at rest.
+- **No content-editing endpoint** — create and delete only.
+- **LOOK/C-LOOK** produce the same output as SCAN/C-SCAN in this simulation, since the model doesn't track the disk's physical boundary as a distinct stop.
+- **SQLite has no stored procedures** — the equivalent logic lives in `DBMSLayer`'s C++ methods instead.
 
 Full details in [`FUTURE_RESEARCH.md`](./FUTURE_RESEARCH.md) and [`DOCUMENTATION.md`](./DOCUMENTATION.md).
 
 ## Tech stack
 
-C++17, SQLite, cpp-httplib, Ollama (`nomic-embed-text`, `llama3.2`), vanilla HTML/CSS/JS on the frontend.
+C++17, SQLite, cpp-httplib, Ollama (`nomic-embed-text`, `llama3.2`), vanilla HTML/CSS/JS on the frontend. Cross-platform build via CMake.
 
 ## References
 
+- Malkov & Yashunin — *Efficient and robust approximate nearest neighbor search using HNSW graphs* (arXiv:1603.09320)
+- Reimers & Gurevych — *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks* (arXiv:1908.10084)
+- Nussbaum et al. — *Nomic Embed: Training a Reproducible Long Context Text Embedder* (arXiv:2402.01613)
 - Silberschatz, Galvin, Gagne — *Operating System Concepts*
 - Elmasri, Navathe — *Fundamentals of Database Systems*
-- Sentence Transformers documentation, sbert.net
-- Ollama documentation, ollama.com
+- Ollama documentation, ollama.com · SQLite documentation, sqlite.org
